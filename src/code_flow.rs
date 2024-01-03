@@ -1,5 +1,4 @@
-use std::{fs::File, env};
-use std::io::prelude::*;
+use std::{fs, env};
 
 use graph_rs_sdk::oauth::AccessToken;
 /// # Example
@@ -94,32 +93,35 @@ pub async fn set_and_req_access_code(access_code: AccessCode) {
 
         println!("{access_token:#?}");
         println!("Access Token Bear: {:#?}", access_token.bearer_token());
-        let bear_token = access_token.bearer_token();
-        let user_id = access_token.user_id().unwrap_or_default();
-        let refresh_token = access_token.refresh_token().unwrap_or_default();
-        let token_state = access_token.state().unwrap_or_default();
-        let expires_in = access_token.expires_in();
-        let token_scope = access_token.scopes().unwrap_or(&String::default()).clone();
+        let  at = access_token.clone();
+        let at_json = serde_json::to_string(&at).unwrap();
+        fs::write("token.json", at_json).expect("Unable to write file");
+        // let bear_token = access_token.bearer_token();
+        // let user_id = access_token.user_id().unwrap_or_default();
+        // let refresh_token = access_token.refresh_token().unwrap_or_default();
+        // let token_state = access_token.state().unwrap_or_default();
+        // let expires_in = access_token.expires_in();
+        // let token_scope = access_token.scopes().unwrap_or(&String::default()).clone();
 
 
-        let mut token_to_save = String::new();
-        token_to_save = format!(
-            "user_id: {user_id}\n
-            refresh_token: {refresh_token}\n
-            token_state: {token_state}\n
-            expires_in: {expires_in}\n
-            token_scope: {token_scope}\n
-            bearer_token: {bear_token}",
-            user_id = user_id,
-            refresh_token = refresh_token,
-            token_state = token_state,
-            expires_in = expires_in,
-            token_scope = token_scope.clone(),
-            bear_token = bear_token
-        );
+        // let mut token_to_save = String::new();
+        // token_to_save = format!(
+        //     "user_id: {user_id}\n
+        //     refresh_token: {refresh_token}\n
+        //     token_state: {token_state}\n
+        //     expires_in: {expires_in}\n
+        //     token_scope: {token_scope}\n
+        //     bearer_token: {bear_token}",
+        //     user_id = user_id,
+        //     refresh_token = refresh_token,
+        //     token_state = token_state,
+        //     expires_in = expires_in,
+        //     token_scope = token_scope.clone(),
+        //     bear_token = bear_token
+        // );
 
-        let mut file = File::create("token").unwrap();
-        file.write_all(token_to_save.as_bytes()).unwrap();
+        // let mut file = File::create("token").unwrap();
+        // file.write_all(token_to_save.as_bytes()).unwrap();
         oauth.access_token(access_token);
     } else {
         // See if Microsoft Graph returned an error in the Response body
