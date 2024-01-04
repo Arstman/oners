@@ -1,43 +1,7 @@
-use std::{fs, env};
+use std::{env, fs};
 
 use graph_rs_sdk::oauth::AccessToken;
-/// # Example
-/// ```
-/// use graph_rs_sdk::*:
-///
-/// #[tokio::main]
-/// async fn main() {
-///   start_server_main().await;
-/// }
-/// ```
-///
-/// # Setup:
-/// This example shows using the OneDrive and SharePoint code flow: https://learn.microsoft.com/en-us/onedrive/developer/rest-api/getting-started/msa-oauth?view=odsp-graph-online
-/// Includes authorization with a state parameter in the request query. The state parameter is optional.
-///
-/// You will first need to head to the Microsoft Application Portal and create and
-/// application. Once the application is created you will need to specify the
-/// scopes you need and change them accordingly in the oauth_web_client() method
-/// when adding scopes using OAuth::add_scope("scope").
-///
-/// For reference the Microsoft Graph Authorization V2 required parameters along with
-/// the methods to use needed to be set are shown in the oauth_web_client() method.
-///
-/// Once an application is registered in Azure you will be given an application id which is the client id in an OAuth2 request.
-/// For this example, a client secret will need to be generated. The client secret is the same as the password
-/// under Application Secrets int the registration portal. If you do not have a client secret then click on
-/// 'Generate New Password'.  Next click on 'Add Platform' and create a new web platform.
-/// Add a redirect url to the platform. In the example below, the redirect url is http://localhost:8000/redirect
-/// but anything can be used.
-///
-/// # Sign In Flow:
-///
-/// After signing in, you will be redirected, and the access code that is given in the redirect
-/// will be used to automatically call the access token endpoint and receive an access token
-/// and/or refresh token.
-///
-/// Disclaimer/Important Info:
-///
+
 /// This example is meant for testing and is not meant to be production ready or complete.
 use graph_rs_sdk::oauth::OAuth;
 use reqwest;
@@ -52,7 +16,7 @@ pub struct AccessCode {
 }
 
 // Create OAuth client and set credentials.
-fn oauth_web_client() -> OAuth {
+pub fn oauth_web_client() -> OAuth {
     let client_id = env::var("DEV_CLIENT_ID").expect("DEV_CLIENT_ID not set");
     let client_secret = env::var("DEV_CLIENT_SECRET").expect("DEV_CLIENT_SECRET not set");
     let mut oauth = OAuth::new();
@@ -76,6 +40,32 @@ fn oauth_web_client() -> OAuth {
     oauth
 }
 
+pub async fn refresh_token(at: AccessToken) -> Option<AccessToken> {
+    let origin_at = at.clone();
+    let mut oauth = oauth_web_client();
+    oauth.response_type("token");
+    oauth.access_token(at);
+
+    let mut client = oauth.build_async().code_flow();
+    let response = client.refresh_token().send().await.unwrap();
+
+    if response.status().is_success() {
+        let mut access_token: AccessToken = response.json().await.unwrap();
+        access_token.set_refresh_token(origin_at.refresh_token().unwrap().as_str());
+        access_token.gen_timestamp();
+        println!("Freshed Access Token: {:?}", access_token);
+
+        let at_json = serde_json::to_string(&access_token).unwrap();
+        fs::write("token.json", at_json).expect("Unable to write refreshed token file");
+        Some(access_token)
+    } else {
+        // See if Microsoft Graph returned an error in the Response body
+        let result: reqwest::Result<serde_json::Value> = response.json().await;
+        println!("{result:#?}");
+        None
+    }
+}
+
 pub async fn set_and_req_access_code(access_code: AccessCode) {
     let mut oauth = oauth_web_client();
     oauth.response_type("token");
@@ -93,35 +83,12 @@ pub async fn set_and_req_access_code(access_code: AccessCode) {
 
         println!("{access_token:#?}");
         println!("Access Token Bear: {:#?}", access_token.bearer_token());
-        let  at = access_token.clone();
+        // save to a file for temporary storage, in a real app you would save this to a database.
+        let mut at = access_token.clone();
+        at.gen_timestamp();
         let at_json = serde_json::to_string(&at).unwrap();
         fs::write("token.json", at_json).expect("Unable to write file");
-        // let bear_token = access_token.bearer_token();
-        // let user_id = access_token.user_id().unwrap_or_default();
-        // let refresh_token = access_token.refresh_token().unwrap_or_default();
-        // let token_state = access_token.state().unwrap_or_default();
-        // let expires_in = access_token.expires_in();
-        // let token_scope = access_token.scopes().unwrap_or(&String::default()).clone();
 
-
-        // let mut token_to_save = String::new();
-        // token_to_save = format!(
-        //     "user_id: {user_id}\n
-        //     refresh_token: {refresh_token}\n
-        //     token_state: {token_state}\n
-        //     expires_in: {expires_in}\n
-        //     token_scope: {token_scope}\n
-        //     bearer_token: {bear_token}",
-        //     user_id = user_id,
-        //     refresh_token = refresh_token,
-        //     token_state = token_state,
-        //     expires_in = expires_in,
-        //     token_scope = token_scope.clone(),
-        //     bear_token = bear_token
-        // );
-
-        // let mut file = File::create("token").unwrap();
-        // file.write_all(token_to_save.as_bytes()).unwrap();
         oauth.access_token(access_token);
     } else {
         // See if Microsoft Graph returned an error in the Response body
@@ -158,15 +125,10 @@ async fn handle_redirect(
     }
 }
 
-/// # Example
-/// ```
-/// use graph_rs_sdk::*:
-///
-/// #[tokio::main]
-/// async fn main() {
-///   start_server_main().await;
-/// }
-/// ```
+
+use futures::channel::oneshot;
+use tokio::time::Duration;
+
 pub async fn start_server_main() {
     let query = warp::query::<AccessCode>()
         .map(Some)
@@ -181,5 +143,21 @@ pub async fn start_server_main() {
     let mut request = oauth.build_async().code_flow();
     request.browser_authorization().open().unwrap();
 
-    warp::serve(routes).run(([127, 0, 0, 1], 8000)).await;
+    // warp::serve(routes).run(([127, 0, 0, 1], 8000)).await;
+
+    let (tx, rx) = oneshot::channel();
+
+    let (_, server) =
+        warp::serve(routes).bind_with_graceful_shutdown(([127, 0, 0, 1], 8000), async {
+            let _ = rx.await;
+        });
+
+    tokio::spawn(server);
+
+    // 设置一个超时时间
+    let timeout = Duration::from_secs(60); // 设置为 60 秒
+    tokio::time::sleep(timeout).await;
+
+    // 超时后，发送一个信号来停止服务器
+    let _ = tx.send(());
 }

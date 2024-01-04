@@ -3084,8 +3084,10 @@ dependencies = [
 name = "oners"
 version = "0.1.0"
 dependencies = [
+ "futures",
  "graph-rs-sdk",
  "handlebars 5.0.0",
+ "rand",
  "reqwest",
  "serde",
  "serde_json",
