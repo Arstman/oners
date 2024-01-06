@@ -1,6 +1,8 @@
 use graph_rs_sdk::*;
 use graph_rs_sdk::oauth::AccessToken;
 
+use crate::drive_types::RootChildren;
+
 pub fn reload_access_token() ->  AccessToken {
     let access_token_json = std::fs::read_to_string("token.json").expect("Unable to read file");
     let access_token: AccessToken = serde_json::from_str(&access_token_json).unwrap();
@@ -30,59 +32,6 @@ pub async fn drive_root(access_token: &str) {
 }
 
 // the root response object struct 
-
-// ParentReference struct
-#[derive(Debug, Deserialize)]
-struct ParentReference {
-    driveId: String,
-    driveType: String,
-    id: String,
-    path: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct ParentReferenceForRoot {
-    driveId: String,
-    driveType: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct RootDriveItem {
-    id: String,
-    name: String,
-    size: i64,
-    folder: Folder,
-    parentReference: ParentReferenceForRoot,
-    webUrl: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct DriveItem {
-    #[serde(rename = "@microsoft.graph.downloadUrl")]
-    download_url: Option<String>,
-    id: String,
-    name: String,
-    size: i64,
-    file: Option<File>,
-    folder: Option<Folder>,
-    parentReference: ParentReference,
-    webUrl: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct File {
-    mimeType: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct Folder {
-    childCount: i64,
-}
-
-#[derive(Debug, Deserialize)]
-struct RootChildren {
-    value: Vec<DriveItem>,
-}
 
 pub async fn drive_root_children(access_token: &str) {
 
