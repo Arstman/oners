@@ -5,6 +5,7 @@ extern crate serde;
 
 mod code_flow;
 mod drive;
+mod ms_oauth;
 
 #[tokio::main]
 async fn main() {

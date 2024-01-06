@@ -33,7 +33,7 @@ pub fn oauth_web_client() -> OAuth {
         .access_token_url("https://login.live.com/oauth20_token.srf")
         .refresh_token_url("https://login.live.com/oauth20_token.srf")
         .response_mode("query")
-        // .state("13534298") // Optional
+        .state("13534298") // Optional
         .logout_url("https://login.live.com/oauth20_logout.srf?") // Optional
         // The redirect_url given above will be used for the logout redirect if none is provided.
         .post_logout_redirect_uri("http://localhost:8000/redirect"); // Optional
@@ -102,7 +102,6 @@ pub async fn set_and_req_access_code(access_code: AccessCode) {
 
 async fn handle_redirect(
     code_option: Option<AccessCode>,
-    state: String,
 ) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
     match code_option {
         Some(access_code) => {
@@ -110,7 +109,7 @@ async fn handle_redirect(
             println!("{access_code:#?}");
 
             // Assert that the state is the same as the one given in the original request.
-            assert_eq!(state.as_str(), access_code.state.as_str());
+            assert_eq!("13534298", access_code.state.as_str());
 
             // Set the access code and request an access token.
             // Callers should handle the Result from requesting an access token
@@ -126,32 +125,34 @@ async fn handle_redirect(
     }
 }
 
+
+use std::time::Duration;
+
+use axum::{routing::get, Router};
+use tokio::net::TcpListener;
+use tokio::signal;
+use tokio::time::sleep;
+
+
+// async fn token_obtain_server() {
+//     let app = Router::new
+
+// }
+
+
 use futures::channel::oneshot;
-use rand::distributions::Alphanumeric;
-use rand::Rng;
-use tokio::time::Duration;
 
 pub async fn start_server_main() {
     let query = warp::query::<AccessCode>()
         .map(Some)
         .or_else(|_| async { Ok::<(Option<AccessCode>,), std::convert::Infallible>((None,)) });
 
-    let random_state: String = rand::thread_rng()
-        .sample_iter(&Alphanumeric)
-        .take(30) // 你可以选择你想要的长度
-        .map(char::from)
-        .collect();
-
-    let state = random_state.clone();
-
     let routes = warp::get()
         .and(warp::path("redirect"))
         .and(query)
-        .and_then(move |q| handle_redirect(q, random_state.clone()));
+        .and_then(handle_redirect);
 
     let mut oauth = oauth_web_client();
-    oauth.state(state.as_str());
-
     let mut request = oauth.build_async().code_flow();
     request.browser_authorization().open().unwrap();
 
